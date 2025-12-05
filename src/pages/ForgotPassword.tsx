@@ -8,6 +8,8 @@ import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 import AuthLayout from "@/components/auth/AuthLayout";
 
 const forgotPasswordSchema = z.object({
@@ -20,6 +22,8 @@ const ForgotPassword = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [submittedEmail, setSubmittedEmail] = useState("");
+  const { toast } = useToast();
+  const { resetPassword } = useAuth();
 
   const {
     register,
@@ -32,8 +36,17 @@ const ForgotPassword = () => {
   const onSubmit = async (data: ForgotPasswordData) => {
     setIsLoading(true);
     
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    const { error } = await resetPassword(data.email);
+    
+    if (error) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+      setIsLoading(false);
+      return;
+    }
     
     setSubmittedEmail(data.email);
     setIsLoading(false);
