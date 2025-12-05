@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { Phone, Calendar, MessageSquare, BarChart3, Settings, LogOut, Bell, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useAuth } from "@/hooks/useAuth";
 
 const stats = [
   { label: "Calls Today", value: "0", icon: Phone, change: "+0%" },
@@ -12,6 +13,12 @@ const stats = [
 ];
 
 const Dashboard = () => {
+  const { signOut, user } = useAuth();
+
+  const handleSignOut = async () => {
+    await signOut();
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -46,11 +53,9 @@ const Dashboard = () => {
             <Button variant="ghost" size="icon">
               <Settings className="w-5 h-5" />
             </Button>
-            <Link to="/login">
-              <Button variant="ghost" size="icon">
-                <LogOut className="w-5 h-5" />
-              </Button>
-            </Link>
+            <Button variant="ghost" size="icon" onClick={handleSignOut}>
+              <LogOut className="w-5 h-5" />
+            </Button>
           </div>
         </div>
       </header>
@@ -64,7 +69,7 @@ const Dashboard = () => {
           className="mb-8"
         >
           <h1 className="font-heading text-2xl md:text-3xl font-bold text-foreground mb-2">
-            Welcome to Your Dashboard
+            Welcome{user?.user_metadata?.full_name ? `, ${user.user_metadata.full_name}` : ""}!
           </h1>
           <p className="text-muted-foreground">
             Your 7-day free trial is active. Configure your AI agent to get started.

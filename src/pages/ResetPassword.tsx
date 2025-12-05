@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Eye, EyeOff, Lock, CheckCircle } from "lucide-react";
+import { Eye, EyeOff, Lock } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 import AuthLayout from "@/components/auth/AuthLayout";
 
 const resetPasswordSchema = z
@@ -29,6 +30,7 @@ const ResetPassword = () => {
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { updatePassword, session } = useAuth();
 
   const {
     register,
@@ -52,11 +54,33 @@ const ResetPassword = () => {
 
   const passwordStrength = getPasswordStrength(password);
 
+  // Check if user came from password reset email
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (!hash.includes("type=recovery") && !session) {
+      toast({
+        title: "Invalid reset link",
+        description: "Please request a new password reset link.",
+        variant: "destructive",
+      });
+      navigate("/forgot-password");
+    }
+  }, [session, navigate, toast]);
+
   const onSubmit = async (data: ResetPasswordData) => {
     setIsLoading(true);
     
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    const { error } = await updatePassword(data.password);
+    
+    if (error) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+      setIsLoading(false);
+      return;
+    }
     
     toast({
       title: "Password Updated!",

@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Eye, EyeOff, Mail, Lock, User, Building2, Phone, ChevronLeft, Check, PartyPopper } from "lucide-react";
+import { Eye, EyeOff, Mail, Lock, User, Building2, Phone, Check, PartyPopper } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -17,7 +17,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 import AuthLayout from "@/components/auth/AuthLayout";
+import { supabase } from "@/integrations/supabase/client";
 
 const step1Schema = z.object({
   fullName: z.string().min(2, "Name must be at least 2 characters"),
@@ -66,6 +68,7 @@ const Register = () => {
   const [formData, setFormData] = useState<Partial<Step1Data & Step2Data>>({});
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { signUp, signInWithGoogle, user, loading } = useAuth();
 
   const step1Form = useForm<Step1Data>({
     resolver: zodResolver(step1Schema),
@@ -88,6 +91,13 @@ const Register = () => {
     },
   });
 
+  // Redirect if already logged in
+  useEffect(() => {
+    if (!loading && user) {
+      navigate("/dashboard");
+    }
+  }, [user, loading, navigate]);
+
   const onStep1Submit = (data: Step1Data) => {
     setFormData({ ...formData, ...data });
     setStep(2);
@@ -97,12 +107,59 @@ const Register = () => {
     setIsLoading(true);
     const finalData = { ...formData, ...data };
     
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    // Sign up with Supabase
+    const { error } = await signUp(
+      finalData.email!,
+      finalData.password!,
+      {
+        full_name: finalData.fullName,
+        business_name: finalData.businessName,
+        business_type: finalData.businessType,
+      }
+    );
+    
+    if (error) {
+      toast({
+        title: "Error",
+        description: error.message === "User already registered"
+          ? "Email already registered. Try signing in instead."
+          : error.message,
+        variant: "destructive",
+      });
+      setIsLoading(false);
+      return;
+    }
+
+    // Create profile in database
+    const { data: { user: newUser } } = await supabase.auth.getUser();
+    if (newUser) {
+      await supabase.from("profiles").insert({
+        user_id: newUser.id,
+        business_name: finalData.businessName!,
+        business_type: finalData.businessType,
+        phone_number: finalData.phone || null,
+      });
+    }
     
     setFormData(finalData);
     setIsLoading(false);
     setStep(3);
+    
+    toast({
+      title: "Account created!",
+      description: "Please check your email to verify your account.",
+    });
+  };
+
+  const handleGoogleSignUp = async () => {
+    const { error } = await signInWithGoogle();
+    if (error) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
   };
 
   const getPasswordStrength = (password: string) => {
@@ -119,6 +176,14 @@ const Register = () => {
 
   const trialEndDate = new Date();
   trialEndDate.setDate(trialEndDate.getDate() + 7);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <AuthLayout
@@ -328,7 +393,7 @@ const Register = () => {
                 </div>
               </div>
 
-              <Button variant="outline" className="w-full" type="button">
+              <Button variant="outline" className="w-full" type="button" onClick={handleGoogleSignUp}>
                 <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
                   <path
                     fill="currentColor"
@@ -459,11 +524,10 @@ const Register = () => {
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => setStep(1)}
                     className="flex-1"
+                    onClick={() => setStep(1)}
                   >
-                    <ChevronLeft className="w-4 h-4 mr-1" />
-                    Back
+                    ← Back
                   </Button>
                   <Button type="submit" variant="hero" className="flex-1" disabled={isLoading}>
                     {isLoading ? "Creating account..." : "Continue →"}
@@ -489,24 +553,25 @@ const Register = () => {
                 <h1 className="font-heading text-2xl md:text-3xl font-bold text-foreground mb-2">
                   You're All Set! 🎉
                 </h1>
-                <p className="text-muted-foreground">Your 7-day free trial has started</p>
+                <p className="text-muted-foreground">
+                  Your 7-day free trial has started
+                </p>
               </div>
 
-              {/* Summary card */}
+              {/* Summary */}
               <div className="glass-card p-6 text-left">
-                <h3 className="font-semibold text-foreground mb-4">Account Summary</h3>
                 <div className="space-y-3">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Business</span>
-                    <span className="text-foreground font-medium">{formData.businessName}</span>
+                    <span className="font-medium text-foreground">{formData.businessName}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Email</span>
-                    <span className="text-foreground font-medium">{formData.email}</span>
+                    <span className="font-medium text-foreground">{formData.email}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Trial ends</span>
-                    <span className="text-accent font-medium">
+                    <span className="font-medium text-foreground">
                       {trialEndDate.toLocaleDateString("en-US", {
                         month: "short",
                         day: "numeric",
@@ -517,15 +582,15 @@ const Register = () => {
                 </div>
               </div>
 
-              {/* What's next */}
-              <div className="text-left">
-                <h3 className="font-semibold text-foreground mb-3">What's next</h3>
-                <div className="space-y-2">
+              {/* Checklist */}
+              <div className="glass-card p-6 text-left">
+                <h3 className="font-semibold text-foreground mb-4">What's next?</h3>
+                <div className="space-y-3">
                   <div className="flex items-center gap-3">
                     <div className="w-6 h-6 rounded-full bg-green-500/20 flex items-center justify-center">
                       <Check className="w-4 h-4 text-green-500" />
                     </div>
-                    <span className="text-muted-foreground">Account created</span>
+                    <span className="text-foreground">Account created</span>
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="w-6 h-6 rounded-full bg-secondary flex items-center justify-center">
@@ -542,11 +607,7 @@ const Register = () => {
                 </div>
               </div>
 
-              <Button
-                variant="hero"
-                className="w-full"
-                onClick={() => navigate("/dashboard")}
-              >
+              <Button variant="hero" className="w-full" onClick={() => navigate("/dashboard")}>
                 Go to Dashboard →
               </Button>
             </motion.div>
